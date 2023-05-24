@@ -23,17 +23,17 @@ const client = new MongoClient(uri, {
 });
 
 //jwt verify:
-const varifyJwt =(req, res, next) =>{
+const varifyJwt = (req, res, next) => {
     const authorization = req.headers.authorization
     // console.log(authorization);
-    if(!authorization){
-       return res.status(401).send({error: true, message: 'unauthorized token'})
+    if (!authorization) {
+        return res.status(401).send({ error: true, message: 'unauthorized token' })
     }
     const token = authorization.split(' ')[1]
     jwt.verify(token, process.env.ACCESS_TOKEN, (error, decoded) => {
-        
-        if(error){
-            return res.status(401).send({error:true, message: 'unauthorized access'})
+
+        if (error) {
+            return res.status(401).send({ error: true, message: 'unauthorized access' })
         }
 
         req.decoded = decoded;
@@ -47,34 +47,46 @@ async function run() {
         // await client.connect();
         const serviceCollection = client.db('carDoctor').collection('services')
         const bookingCollection = client.db('carDoctor').collection('bookings')
-        
+
         // jwt:
         app.post('/jwt', (req, res) => {
             const user = req.body;
             console.log(user);
-            const token = jwt.sign(user, process.env.ACCESS_TOKEN, {expiresIn: '1h' })
-            res.send({token})
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: '1h' })
+            res.send({ token })
         })
 
         //service routs
-        app.get('/services', async(req, res) => {
-            const cursor = serviceCollection.find()
+        app.get('/services', async (req, res) => {
+            const sort = req.query.sort
+            const search = req.query.search;
+            
+            const query = {title : { $regex: search, $options: 'i'}};
+            const options = {
+
+                sort: {
+                    "price": sort === 'acs'? 1 : -1
+                },
+
+            };
+            const cursor = serviceCollection.find(query, options)
             const result = await cursor.toArray()
             res.send(result)
         })
 
-        app.get('/services/:id', async(req, res) => {
+        app.get('/services/:id', async (req, res) => {
             const id = req.params.id;
-            
-            const query = {_id: new ObjectId(id)}
+
+            const query = { _id: new ObjectId(id) }
             const options = {
-                projection: {  title: 1, service_id: 1, img: 1, price:1 },
-              };
-            const result = await serviceCollection.findOne(query, options );
+                projection: { title: 1, service_id: 1, img: 1, price: 1 },
+            };
+            const result = await serviceCollection.findOne(query, options);
+
             res.send(result)
         })
 
-        
+
         //bookings:
         app.post('/bookings', async (req, res) => {
             const order = req.body;
@@ -83,24 +95,24 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/bookings', varifyJwt, async(req, res) => {
+        app.get('/bookings', varifyJwt, async (req, res) => {
             const decoded = req.decoded;
-            
-            if(decoded.email !== req.query.email){
-                return res.status(403).send({error: true, message: 'forbidden access'})
+
+            if (decoded.email !== req.query.email) {
+                return res.status(403).send({ error: true, message: 'forbidden access' })
             }
             let query = {}
-            if(req?.query?.email){
-                query = {email: req.query.email}
+            if (req?.query?.email) {
+                query = { email: req.query.email }
             }
             const result = await bookingCollection.find(query).toArray()
             res.send(result)
 
         })
 
-        app.delete('/bookings/:id', async(req, res) => {
+        app.delete('/bookings/:id', async (req, res) => {
             const id = req.params.id
-            const query ={_id: new ObjectId(id)}
+            const query = { _id: new ObjectId(id) }
             const result = await bookingCollection.deleteOne(query)
             res.json(result)
         })
